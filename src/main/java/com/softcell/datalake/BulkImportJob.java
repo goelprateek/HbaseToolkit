@@ -3,6 +3,7 @@ package com.softcell.datalake;
 
 import com.mongodb.MongoClientURI;
 import com.mongodb.hadoop.MongoInputFormat;
+import com.mongodb.hadoop.MongoOutputFormat;
 import com.mongodb.hadoop.util.MongoConfigUtil;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -12,6 +13,8 @@ import org.apache.hadoop.hbase.client.*;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2;
 import org.apache.hadoop.hbase.mapreduce.LoadIncrementalHFiles;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.TextInputFormat;
 import org.apache.hadoop.mapreduce.Job;
 
 import java.io.IOException;
@@ -111,14 +114,13 @@ public class BulkImportJob {
         _job.setMapperClass(BulkImportMapper.class);
         _job.setMapOutputKeyClass(ImmutableBytesWritable.class);
         _job.setMapOutputValueClass(Put.class);
-
         MongoConfigUtil.setInputURI(getConfiguration(), _mongoURI);
         MongoConfigUtil.setReadSplitsFromSecondary(getConfiguration(), true);
     }
 
     private void configureBulkImport() throws IOException {
 
-        Connection connection = ConnectionFactory.createConnection(getConfiguration());
+        Connection connection = ConnectionFactory.createConnection();
 
         Table table = connection.getTable(TableName.valueOf(_tableName));
 

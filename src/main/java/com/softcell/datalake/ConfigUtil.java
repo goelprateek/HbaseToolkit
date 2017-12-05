@@ -2,6 +2,7 @@ package com.softcell.datalake;
 
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 
 public class ConfigUtil {
 
@@ -31,6 +32,8 @@ public class ConfigUtil {
 
     public static final String DEFAULT_TAILER_STATE_TABLE = "_zw_tailers";
 
+    public static final String DEFAULT_TEMPORARY_FS_DIRECTORY_KEY = "/tmp/hbase";
+
     public static void setTranslatorClass(Configuration conf, Class<? extends Translator> translatorClass) {
         conf.setClass(TRANSLATOR_CLASS, translatorClass, Translator.class);
     }
@@ -47,6 +50,14 @@ public class ConfigUtil {
         } catch (Exception e) {
             throw new RuntimeException("Error instantiating ZWTranslator class", e);
         }
+    }
+
+    public static String getTempFSDirecotyKey(Configuration conf) {
+        return conf.get(HConstants.TEMPORARY_FS_DIRECTORY_KEY, DEFAULT_TEMPORARY_FS_DIRECTORY_KEY);
+    }
+
+    public static void setDefaultFsDirectoryKey(Configuration conf, String key) {
+        conf.set(HConstants.TEMPORARY_FS_DIRECTORY_KEY, key);
     }
 
     public static void setTemporaryHFilePath(Configuration conf, String hfilePath) {

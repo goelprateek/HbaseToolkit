@@ -15,6 +15,7 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
+import org.bson.BsonTimestamp;
 import org.bson.Document;
 import org.bson.types.BSONTimestamp;
 import org.slf4j.Logger;
@@ -66,7 +67,7 @@ public class Streamer {
 
     private boolean _optimeSet = false;
 
-    public Streamer(Configuration conf, MongoClient mongo, Connection hBaseConnection , String tailerName) {
+    public Streamer(Configuration conf, MongoClient mongo, Connection hBaseConnection, String tailerName) {
         _conf = conf;
         _mongo = mongo;
         _knownTables = new HashMap<>();
@@ -84,6 +85,64 @@ public class Streamer {
         _skipUpdates = ConfigUtil.getSkipUpdates(_conf);
         _skipDeletes = ConfigUtil.getSkipDeletes(_conf);
         _bufferWrites = ConfigUtil.getBufferWrites(_conf);
+    }
+
+    public Streamer(Configuration conf, MongoClient mongo, Connection hBaseConnection) {
+        this(conf, mongo, hBaseConnection, null);
+    }
+
+    public static void main(String[] args) throws Exception {
+        CommandLineOptions opts = new CommandLineOptions();
+        JCommander parser = new JCommander(opts, args);
+
+        if (opts.help) {
+            parser.usage();
+            return;
+        }
+
+        Configuration conf = HBaseConfiguration.create();
+
+        if (opts.translatorClass != null) {
+            LOGGER.info("Setting the translator class to " + opts.translatorClass);
+
+            try {
+                @SuppressWarnings("unchecked")
+                Class<? extends Translator> translatorClass = ClassUtils.getClass(opts.translatorClass);
+                ConfigUtil.setTranslatorClass(conf, translatorClass);
+            } catch (ClassNotFoundException e) {
+                LOGGER.error("Couldn't find translator class: " + opts.translatorClass, e);
+                return;
+            }
+        }
+
+        if (opts.skipUpdates) {
+            ConfigUtil.setSkipUpdates(conf, true);
+        }
+
+        if (opts.skipDeletes) {
+            ConfigUtil.setSkipDeletes(conf, true);
+        }
+
+        if (opts.bufferWrites) {
+            if (!opts.skipUpdates || !opts.skipDeletes) {
+                LOGGER.warn("--buffer-writes is set, but you're missing --skip-updates and/or --skip-deletes! You should be careful, because ordering may not work properly.");
+            }
+
+            ConfigUtil.setBufferWrites(conf, true);
+        }
+
+        MongoClientURI uri = new MongoClientURI(opts.mongoURI);
+
+        MongoClient mongo = new MongoClient(uri);
+
+        Connection connection = ConnectionFactory.createConnection(conf);
+
+        Streamer streamer = new Streamer(conf, mongo, connection, opts.tailerName);
+        Thread currentThread = Thread.currentThread();
+        Runtime.getRuntime().addShutdownHook(new TailerCleanupThread(streamer, currentThread));
+        streamer.stream();
+
+        return;
     }
 
     private Table createStateTable() {
@@ -123,21 +182,17 @@ public class Streamer {
         }
     }
 
-    private Table getHBaseTable(String tableName){
+    private Table getHBaseTable(String tableName) {
         try {
 
             return _hBaseConnection.getTable(TableName.valueOf(tableName));
 
 
-        }catch (Exception e){
+        } catch (Exception e) {
             throw new RuntimeException("Failed to create table in  HBase", e);
         }
 
 
-    }
-
-    public Streamer(Configuration conf, MongoClient mongo, Connection hBaseConnection) {
-        this(conf, mongo, hBaseConnection,null);
     }
 
     public void stream() {
@@ -147,7 +202,7 @@ public class Streamer {
 
         try {
 
-            while (_running.get() && cursor.hasNext()){
+            while (_running.get() && cursor.hasNext()) {
                 Document next = cursor.next();
                 handleOp(new BasicDBObject(next));
             }
@@ -249,18 +304,19 @@ public class Streamer {
             return;
         }
 
-        DBObject data = (DBObject) doc.get("o");
+        Document data = (Document) doc.get("o");
+
         if (type.equals("i")) {
             handleInsert(table, data);
         } else if (!_skipUpdates && type.equals("u")) {
-            DBObject selector = (DBObject) doc.get("o2");
+            Document selector = (Document) doc.get("o2");
             handleUpdate(table, data, selector, database, collection);
         } else if (!_skipDeletes && type.equals("d")) {
             handleDelete(table, data);
         }
     }
 
-    protected void handleInsert(Table table, DBObject doc) {
+    protected void handleInsert(Table table, Document doc) {
         byte[] row = _translator.createRowKey(doc);
         Put put = _translator.createPut(row, doc);
 
@@ -271,7 +327,7 @@ public class Streamer {
         }
     }
 
-    protected void handleUpdate(Table table, DBObject doc, DBObject selector,
+    protected void handleUpdate(Table table, Document doc, Document selector,
                                 String database, String collection) {
         // for $set, etc, grab the whole document from mongo
         boolean resync = false;
@@ -289,7 +345,7 @@ public class Streamer {
             MongoCollection<Document> collection1 = _mongo.getDatabase(database).getCollection(collection)
                     .withReadPreference(ReadPreference.primaryPreferred());
             Document id1 = collection1.find(eq("_id", id)).first();
-            doc =  new BasicDBObject(id1);
+            doc = new Document(id1);
 
             // the document may have since been removed
             if (doc == null) return;
@@ -308,7 +364,7 @@ public class Streamer {
         }
     }
 
-    protected void handleDelete(Table table, DBObject selector) {
+    protected void handleDelete(Table table, Document selector) {
         byte[] row = _translator.createRowKey(selector);
         Delete del = new Delete(row);
 
@@ -351,7 +407,7 @@ public class Streamer {
     }
 
     private void updateOptime(BasicDBObject doc) {
-        BSONTimestamp ts = (BSONTimestamp) doc.get("ts");
+        BsonTimestamp ts = (BsonTimestamp) doc.get("ts");
         int optime = ts.getTime(), inc = ts.getInc();
 
         // only checkpoint every 60 seconds
@@ -402,7 +458,6 @@ public class Streamer {
         private boolean help;
     }
 
-
     private static class TailerCleanupThread extends Thread {
 
         private final Streamer _streamer;
@@ -426,60 +481,6 @@ public class Streamer {
                 LOGGER.info(" having hard time in going down ! ");
             }
         }
-    }
-
-    public static void main(String[] args) throws Exception {
-        CommandLineOptions opts = new CommandLineOptions();
-        JCommander parser = new JCommander(opts, args);
-
-        if (opts.help) {
-            parser.usage();
-            return;
-        }
-
-        Configuration conf = HBaseConfiguration.create();
-
-        if (opts.translatorClass != null) {
-            LOGGER.info("Setting the translator class to " + opts.translatorClass);
-
-            try {
-                @SuppressWarnings("unchecked")
-                Class<? extends Translator> translatorClass = ClassUtils.getClass(opts.translatorClass);
-                ConfigUtil.setTranslatorClass(conf, translatorClass);
-            } catch (ClassNotFoundException e) {
-                LOGGER.error("Couldn't find translator class: " + opts.translatorClass, e);
-                return;
-            }
-        }
-
-        if (opts.skipUpdates) {
-            ConfigUtil.setSkipUpdates(conf, true);
-        }
-
-        if (opts.skipDeletes) {
-            ConfigUtil.setSkipDeletes(conf, true);
-        }
-
-        if (opts.bufferWrites) {
-            if (!opts.skipUpdates || !opts.skipDeletes) {
-                LOGGER.warn("--buffer-writes is set, but you're missing --skip-updates and/or --skip-deletes! You should be careful, because ordering may not work properly.");
-            }
-
-            ConfigUtil.setBufferWrites(conf, true);
-        }
-
-        MongoClientURI uri = new MongoClientURI(opts.mongoURI);
-
-        MongoClient mongo = new MongoClient(uri);
-
-        Connection connection = ConnectionFactory.createConnection(conf);
-
-        Streamer streamer = new Streamer(conf, mongo,  connection, opts.tailerName);
-        Thread currentThread = Thread.currentThread();
-        Runtime.getRuntime().addShutdownHook(new TailerCleanupThread(streamer, currentThread));
-        streamer.stream();
-
-        return;
     }
 
 }

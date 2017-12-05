@@ -6,23 +6,32 @@ import org.apache.hadoop.hbase.HColumnDescriptor;
 import org.apache.hadoop.hbase.HTableDescriptor;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.util.Bytes;
+import org.bson.BSONEncoder;
 import org.bson.BSONObject;
 import org.bson.BasicBSONEncoder;
+import org.bson.Document;
 import org.bson.types.ObjectId;
+import org.json.simple.parser.JSONParser;
+import org.json.simple.parser.ParseException;
+
+import java.io.ByteArrayOutputStream;
+import java.io.ObjectOutputStream;
+import java.util.Set;
 
 public class BasicTranslator implements Translator {
 
 
-    public final byte[] COL_FAMILY = "z".getBytes();
+    public final byte[] COL_FAMILY = "colfam1".getBytes();
 
-    public final byte[] COL_QUALIFIER = "w".getBytes();
+    public final byte[] COL_QUALIFIER = "col1".getBytes();
 
-    public final BasicBSONEncoder bsonEncoder = new BasicBSONEncoder();
+    public final BSONEncoder bsonEncoder = new BasicBSONEncoder();
 
 
     @Override
     public String mapNamespaceToHBaseTable(String database, String collection) {
-        return "zw." + database + "." + collection;
+        return "mongo." + database + "." + collection;
     }
 
     @Override
@@ -38,7 +47,7 @@ public class BasicTranslator implements Translator {
     }
 
     @Override
-    public byte[] createRowKey(BSONObject bsonObject) {
+    public byte[] createRowKey(Document bsonObject) {
 
         Object id = bsonObject.get("_id");
 
@@ -47,25 +56,46 @@ public class BasicTranslator implements Translator {
         if (id instanceof ObjectId) {
             raw = ((ObjectId) id).toByteArray();
         } else if (id instanceof String) {
-            raw = ((ObjectId) id).toByteArray();
-        } else if (id instanceof BSONObject) {
+            raw = ((String) id).getBytes();
+        } else if (id instanceof Document) {
             raw = bsonEncoder.encode((BSONObject) id);
         } else {
             throw new RuntimeException(" not able to serialize _id: " + id.toString());
         }
 
-        return DigestUtils.md5(raw);
+        return raw;//DigestUtils.md5(raw);
     }
 
     @Override
-    public Put createPut(byte[] row, BSONObject bsonObject) {
+    public Put createPut(byte[] row, Document bsonObject) {
 
-        byte[] raw = bsonEncoder.encode(bsonObject);
+        Put put = new Put(new ObjectId(row).toByteArray());
 
-        Put  put = new Put(row);
-
-        put.addColumn(COL_FAMILY,COL_QUALIFIER,raw);
+        bsonObject.keySet()
+                .parallelStream()
+                .forEachOrdered(obj -> put.addColumn(COL_FAMILY, Bytes.toBytes(obj), toByteArray(bsonObject.get(obj))));
 
         return put;
     }
+
+    private byte[] toByteArray(Object o) {
+        byte[] bytes = null;
+
+
+        try (ByteArrayOutputStream arrayOutputStream = new ByteArrayOutputStream();
+             ObjectOutputStream outputStream = new ObjectOutputStream(arrayOutputStream)) {
+
+            outputStream.writeObject(o);
+            outputStream.flush();
+            bytes = arrayOutputStream.toByteArray();
+
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return bytes;
+    }
+
+
 }

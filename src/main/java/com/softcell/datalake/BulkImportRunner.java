@@ -106,9 +106,10 @@ public class BulkImportRunner implements Tool {
 
         if (database != null && collection != null) {
 
-            if (null != mongo.getDatabase(database)) {
+            if(null == mongo.getDatabase(database).getCollection(collection)){
                 throw new IllegalArgumentException(" Couldn't find namespace: " + database + "." + collection);
             }
+
 
             buildJob(uri, database, collection);
             return;
@@ -149,6 +150,7 @@ public class BulkImportRunner implements Tool {
             try {
                 job.submit();
             } catch (Exception e) {
+                e.printStackTrace();
                 LOGGER.error("Error while running job", e);
                 return false;
             }

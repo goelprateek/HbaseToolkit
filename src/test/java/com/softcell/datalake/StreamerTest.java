@@ -30,6 +30,7 @@ public class StreamerTest {
 
     private static MongoClient mongoClient;
 
+
     private static Connection connection;
 
     private String name;
@@ -41,12 +42,13 @@ public class StreamerTest {
     @BeforeClass
     public static void setUpClass() throws Exception {
         try {
+
             // try the normal way first, to avoid chunder
-            MongoClient testMongoClient = new MongoClient("localhost", 27017);
+            MongoClient testMongoClient = new MongoClient("localhost", 37017);
             testMongoClient.listDatabaseNames();
 
             // this is necessary to connnect as a replica set
-            mongoClient = new MongoClient(new MongoClientURI("mongodb://localhost:27017,localhost:27017/?slaveOk=true"));
+            mongoClient = new MongoClient(new MongoClientURI("mongodb://localhost:37017,localhost:37018/?slaveOk=true"));
             mongoClient.listDatabaseNames();
             assumeNotNull(mongoClient.getReplicaSetStatus());
         } catch (Exception e) {
@@ -79,6 +81,8 @@ public class StreamerTest {
     public void testBasicTailer() throws Exception {
 
         Configuration conf = connection.getConfiguration();
+
+        ConfigUtil.setDefaultFsDirectoryKey(conf, "/tmp/hbase-staging");
 
         ConfigUtil.setSkipBacklog(conf, true);
 
@@ -114,6 +118,7 @@ public class StreamerTest {
     @Test
     public void testSkipUpdates() throws Exception {
         Configuration conf = connection.getConfiguration();
+        ConfigUtil.setDefaultFsDirectoryKey(conf, "/tmp/hbase-staging");
         ConfigUtil.setSkipBacklog(conf, true);
         ConfigUtil.setSkipUpdates(conf, true);
 
@@ -142,6 +147,7 @@ public class StreamerTest {
 
         Configuration conf = connection.getConfiguration();
 
+        ConfigUtil.setDefaultFsDirectoryKey(conf, "/tmp/hbase-staging");
 
         ConfigUtil.setSkipBacklog(conf, true);
         ConfigUtil.setSkipDeletes(conf, true);
@@ -173,6 +179,7 @@ public class StreamerTest {
 
         Configuration conf = connection.getConfiguration();
 
+        ConfigUtil.setDefaultFsDirectoryKey(conf, "/tmp/hbase-staging");
 
         ConfigUtil.setSkipBacklog(conf, true);
         ConfigUtil.setSkipUpdates(conf, true);
@@ -205,6 +212,7 @@ public class StreamerTest {
     public void testResyncUpdate() throws Exception {
 
         Configuration conf = connection.getConfiguration();
+        ConfigUtil.setDefaultFsDirectoryKey(conf, "/tmp/hbase-staging");
 
         ConfigUtil.setSkipBacklog(conf, true);
 
@@ -239,7 +247,7 @@ public class StreamerTest {
         collection.insertOne(new Document(new BasicDBObject("_id", "a").append("num", 1)));
         collection.insertOne(new Document(new BasicDBObject("_id", "b").append("num", 2)));
         collection.insertOne(new Document(new BasicDBObject("_id", "c").append("num", 3)));
-        collection.updateOne(new BasicDBObject("_id", "a"), new BasicDBObject("num", 4));
+        collection.updateOne(new BasicDBObject("_id", "a"), new BasicDBObject("$set", new BasicDBObject("num",4)));
         collection.deleteOne(new BasicDBObject("_id", "c"));
         Thread.sleep(15000);
     }
