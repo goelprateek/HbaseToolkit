@@ -24,18 +24,17 @@ public class BulkImportRunnerTest {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BulkImportRunnerTest.class);
 
-    private static  HBaseCommonTestingUtility util = new HBaseCommonTestingUtility();
+    private static HBaseCommonTestingUtility util = new HBaseCommonTestingUtility();
 
     private static MongoClient mongoClient;
 
     private static Connection connection;
 
 
-
     @BeforeClass
-    public static void setUpClass(){
+    public static void setUpClass() {
 
-        try{
+        try {
 
             MongoClientURI mongoClientURI = new MongoClientURI("mongodb://localhost:27017");
 
@@ -44,9 +43,8 @@ public class BulkImportRunnerTest {
             mongoClient.getUsedDatabases();
 
 
-
-        }catch (Exception e){
-            LOGGER.error(" Not able to connect with mongo instance with probable cause {}",e);
+        } catch (Exception e) {
+            LOGGER.error(" Not able to connect with mongo instance with probable cause {}", e);
             assumeTrue(false);
         }
 
@@ -54,7 +52,7 @@ public class BulkImportRunnerTest {
 
 
     @Before
-    public void setup(){
+    public void setup() {
         try {
 
             Configuration configuration = util.getConfiguration();
@@ -80,12 +78,12 @@ public class BulkImportRunnerTest {
             barCollection.insertOne(new Document(new BasicDBObject("_id", "c").append("num", 13)));
 
 
-        } catch(Exception e) {
+        } catch (Exception e) {
             System.out.println("error setting up mongo: " + e);
         }
     }
 
-    /*@After
+    @After
     public void tearDown() throws Exception {
         try {
 
@@ -94,7 +92,8 @@ public class BulkImportRunnerTest {
             admin.disableTable(tableName);
             admin.deleteTable(tableName);
 
-        } catch (TableNotFoundException e) {}
+        } catch (TableNotFoundException e) {
+        }
 
         try {
 
@@ -103,8 +102,9 @@ public class BulkImportRunnerTest {
             admin.disableTable(tableName);
             admin.deleteTable(tableName);
 
-        } catch (TableNotFoundException e) {}
-    }*/
+        } catch (TableNotFoundException e) {
+        }
+    }
 
     @AfterClass
     public static void tearDownClass() throws Exception {
@@ -116,9 +116,9 @@ public class BulkImportRunnerTest {
 
         Configuration conf = connection.getConfiguration();
 
-        conf.set(HConstants.TEMPORARY_FS_DIRECTORY_KEY,"/tmp/hbase-staging");
+        conf.set(HConstants.TEMPORARY_FS_DIRECTORY_KEY, "/tmp/hbase-staging");
 
-        ConfigUtil.setTranslatorClass(conf,StringTranslator.class);
+        ConfigUtil.setTranslatorClass(conf, StringTranslator.class);
 
         TableName fooTable = TableName.valueOf("mongo._test_hbase.foo");
 
@@ -148,7 +148,7 @@ public class BulkImportRunnerTest {
 
         Configuration conf = connection.getConfiguration();
 
-        conf.set(HConstants.TEMPORARY_FS_DIRECTORY_KEY,"/tmp/hbase-staging");
+        conf.set(HConstants.TEMPORARY_FS_DIRECTORY_KEY, "/tmp/hbase-staging");
 
 
         BulkImportRunner runner = new BulkImportRunner(conf);
@@ -171,7 +171,7 @@ public class BulkImportRunnerTest {
     public void testMerge() throws Exception {
         Configuration conf = util.getConfiguration();
 
-        conf.set(HConstants.TEMPORARY_FS_DIRECTORY_KEY,"/tmp/hbase-staging");
+        conf.set(HConstants.TEMPORARY_FS_DIRECTORY_KEY, "/tmp/hbase-staging");
 
         BulkImportRunner runner = new BulkImportRunner(conf);
         runner.addJob("mongodb://localhost:37017/_test_hbase.foo");
@@ -224,7 +224,7 @@ public class BulkImportRunnerTest {
 
         BSONDecoder decoder = new BasicBSONDecoder();
         byte[] raw = DigestUtils.md5(id.getBytes());
-        Get get = new Get(raw).addColumn(Bytes.toBytes("colfam1"),Bytes.toBytes("col1"));
+        Get get = new Get(raw).addColumn(Bytes.toBytes("colfam1"), Bytes.toBytes("col1"));
         get.setMaxVersions();
 
         Result result = table.get(get);
@@ -236,7 +236,7 @@ public class BulkImportRunnerTest {
 
         for (int i = 0; i < cells.length; i++) {
 
-            byte[] bytes =  CellUtil.cloneValue(cells[i]);
+            byte[] bytes = CellUtil.cloneValue(cells[i]);
 
             values[i] = (Integer) Document.parse(Bytes.toStringBinary(bytes)).get("num");
 
@@ -248,11 +248,12 @@ public class BulkImportRunnerTest {
     private int getCount(Table table) throws Exception {
         int count = 0;
         ResultScanner scanner = table.getScanner(new Scan());
-        for (Result rs = scanner.next(); rs != null; rs = scanner.next()) { count++; }
+        for (Result rs = scanner.next(); rs != null; rs = scanner.next()) {
+            count++;
+        }
 
         return count;
     }
-
 
 
 }
